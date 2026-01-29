@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIMULATED ACCOUNTING SYSTEM</title>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body{
+  margin:0;height:100vh;background:#000;color:#33ff33;
+  font-family:Consolas,monospace;
+  display:flex;justify-content:center;align-items:center;
+}
+.hidden{display:none}
+
+/* CLI */
+#terminal{
+  width:90%;max-width:820px;height:520px;
+  border:1px solid #33ff33;padding:10px;
+  display:flex;flex-direction:column;
+}
+#log{flex:1;white-space:pre-wrap;overflow-y:auto;font-size:14px;}
+#input{background:black;border:none;color:#33ff33;outline:none;font-family:inherit;}
+.red{color:#ff4444}
+.dim{opacity:.4;font-size:11px;text-align:center;margin-top:6px}
+
+/* GUI */
+#gui{
+  background:#f5f5f5;color:#333;width:360px;
+  padding:20px;border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+  font-family:"微軟正黑體",sans-serif;
+}
+#gui h2{text-align:center}
+#gui input,#gui button{
+  width:100%;padding:10px;margin:6px 0;
+  border-radius:6px;border:1px solid #ccc;
+}
+#gui button{background:#4CAF50;color:#fff;border:none}
+#list{margin-top:10px;font-size:14px}
+#list div{display:flex;justify-content:space-between;margin:4px 0}
+
+/* CLI 按鈕區 */
+#cliButtons{margin-top:12px;}
+#cliButtons button{margin:4px 2px;background:#333;color:#33ff33;border:1px solid #33ff33;cursor:pointer;}
+
+/* Toggle */
+.toggle{
+  margin-top:8px;background:#222;color:#33ff33;
+  border:1px solid #33ff33;cursor:pointer;
+}
+
+/* RWD */
+@media (max-width:768px){
+  body{align-items:flex-start}
+  #terminal,#gui{
+    width:100%;height:100vh;max-width:none;
+    border-radius:0;box-shadow:none;
+  }
+  #input{font-size:16px}
+}
+</style>
+</head>
+
+<body>
+
+<!-- CLI -->
+<div id="terminal">
+  <div id="log"></div>
+  <input id="input" placeholder="type command..." autocomplete="off"
+    autocapitalize="off" autocorrect="off" spellcheck="false">
+  <button class="toggle" onclick="toggleMode()">SWITCH TO GUI MODE</button>
+  <div class="dim">
+    [ SIMULATION MODE ENABLED ]<br>
+    All commands are for demo only
+  </div>
+</div>
+
+<!-- GUI -->
+<div id="gui" class="hidden">
+  <h2>GUI 記帳</h2>
+  <input id="gItem" placeholder="項目">
+  <input id="gAmount" type="number" placeholder="金額">
+  <button onclick="guiAdd()">加入</button>
+  <button onclick="exportPDF()">匯出 PDF</button>
+  <div id="list"></div>
+
+  <!-- CLI 快捷按鈕區 -->
+  <div id="cliButtons">
+    <h3>CLI 快捷指令</h3>
+    <button onclick="cliCommand('list')">列出紀錄</button>
+    <button onclick="cliCommand('export')">匯出 PDF</button>
+    <button onclick="cliCommand('add')">加入紀錄</button>
+    <button onclick="cliCommand('help')">顯示 help</button>
+  </div>
+
+  <button class="toggle" onclick="toggleMode()">SWITCH TO CLI MODE</button>
+</div>
+
+<script>
+let data=[];
+
+/* MODE 切換 */
+const terminal=document.getElementById("terminal");
+const gui=document.getElementById("gui");
+function toggleMode(){
+  terminal.classList.toggle("hidden");
+  gui.classList.toggle("hidden");
+  renderGUI();
+}
+
+/* CLI log */
+const logBox=document.getElementById("log");
+const input=document.getElementById("input");
+function log(t){logBox.textContent+=t+"\n";logBox.scrollTop=logBox.scrollHeight;}
+function logRed(t){
+  const s=document.createElement("span");
+  s.className="red";s.textContent=t+"\n";
+  logBox.appendChild(s);logBox.scrollTop=logBox.scrollHeight;
+}
+function divider(){log("_".repeat(30));}
+function rand(){return Math.floor(Math.random()*256);}
+
+/* 模擬登錄 */
+function boot(){
+  log(`[${new Date().toISOString().slice(0,19)}] login from 192.168.${rand()}.${rand()}`);
+  log("> authenticating user");
+  let p=0;
+  const t=setInterval(()=>{
+    p+=20;
+    log("["+"█".repeat(p/5)+"░".repeat(20-p/5)+`] ${p}%`);
+    if(p>=100){
+      clearInterval(t);
+      if(Math.random()<0.3){
+        logRed("[ CRITICAL ] IP TRACE FAILED");
+      }
+      divider();
+      log("ACCESS GRANTED");
+      log("[ SIMULATION MODE ENABLED ]");
+      divider();
+      log("type 'help' for commands");
+    }
+  },250);
+}
+boot();
+
+/* CLI 指令統一函數 */
+function cliCommand(cmd){
+  cmd = cmd.trim();
+  log("> "+cmd);
+  const p = cmd.split(" ");
+
+  if(p[0]==="add"){
+    let item = p[1];
+    let amount = +p[2];
+    if(!item || !amount){
+      item = prompt("請輸入項目名稱:");
+      if(!item) return;
+      amount = parseFloat(prompt("請輸入金額:"));
+      if(!amount) return;
+    }
+    data.push({item:item,amount:amount});
+    log("[ OK ] record added");
+    renderGUI();
+  }
+  else if(p[0]==="list"){
+    if(data.length===0) log("[ Info ] 沒有紀錄");
+    else data.forEach((r,i)=>log(`${i}: ${r.item} ${r.amount}`));
+  }
+  else if(p[0]==="export"){
+    log("[ OK ] generating PDF...");
+    exportPDF();
+    log("[ OK ] records.pdf exported");
+  }
+  else if(p[0]==="help"){
+    log("Available commands:");
+    log("add [item] [amount] - add record (or use prompt)");
+    log("list - list all records");
+    log("export - export PDF");
+    log("help - show this help");
+  }
+  else{
+    logRed(`${p[0]}: command not found`);
+  }
+}
+
+/* CLI 輸入框事件 */
+input.addEventListener("keydown", e=>{
+  if(e.key!=="Enter") return;
+  const cmd = input.value.trim();
+  input.value = "";
+  if(!cmd) return;
+  cliCommand(cmd);
+});
+
+/* GUI */
+function guiAdd(){
+  const i=document.getElementById("gItem").value;
+  const a=+document.getElementById("gAmount").value;
+  if(!i || !a) return;
+  data.push({item:i, amount:a});
+  renderGUI();
+}
+function renderGUI(){
+  const list=document.getElementById("list");
+  list.innerHTML="";
+  data.forEach((r,i)=>{
+    const d=document.createElement("div");
+    d.innerHTML=`${r.item} ${r.amount} <span onclick="del(${i})" style="cursor:pointer;color:red">❌</span>`;
+    list.appendChild(d);
+  });
+}
+function del(i){data.splice(i,1);renderGUI();}
+
+/* PDF 純文字帳本，不截圖 */
+function exportPDF(){
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("p","pt","a4");
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 20;
+  const lineHeight = 18;
+  let y = margin;
+
+  pdf.setFontSize(14);
+  pdf.text("Accounting Records", margin, y);
+  y += lineHeight;
+
+  let total = 0;
+  data.forEach((r,i)=>{
+    const line = `${i+1}. ${r.item} - ${r.amount}`;
+    if(y + lineHeight > pageHeight - margin){
+      pdf.addPage();
+      y = margin;
+    }
+    pdf.text(line, margin, y);
+    y += lineHeight;
+    total += r.amount;
+  });
+
+  if(y + lineHeight > pageHeight - margin){
+    pdf.addPage();
+    y = margin;
+  }
+  pdf.text(`Total: ${total}`, margin, y + 5);
+
+  pdf.save("records.pdf");
+  alert("PDF 已下載！");
+}
+</script>
+
+</body>
+</html>
